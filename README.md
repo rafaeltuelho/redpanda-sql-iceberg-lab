@@ -93,12 +93,37 @@ Credentials you need:
 4. Choose how the app signs in (`.env`):
    * `RP_SQL_AUTH=client_secret`, with `RP_SQL_USER` set to the client ID and
      `RP_SQL_PASSWORD` set to the client secret. No password setup is needed.
-   * `RP_SQL_AUTH=scram`, with `RP_SQL_USER` set to the service account's email. A
-     SQL: Manage user first sets the password:
-     `ALTER USER "<service-account-email>" WITH PASSWORD '...'`.
+   * `RP_SQL_AUTH=scram`, with `RP_SQL_USER` set to the service account's email and
+     `RP_SQL_PASSWORD` set to the password from step 5.
+5. Set a SCRAM password. The `replay-shift` pipeline always needs one, because its
+   `RP_SQL_DSN` secret is a plain Postgres URL.
 
-The `RP_SQL_DSN` secret for the `replay-shift` pipeline is a plain Postgres URL, so it uses
-the SCRAM password from step 4. If you also use this service account for
+   The Console shows a service account's client ID and secret, but not the email that is
+   its SQL username. To find the email, sign in with the client secret (step 4) and ask the
+   engine:
+
+   ```shell
+   python scripts/run_sql.py -c "SELECT current_user"
+   # <service-account-id>@iam.serviceaccount.redpanda.com
+   ```
+
+   Then set the password as a SQL: Manage user. If the service account has SQL: Manage,
+   it can set its own password. The username is an identifier, so it takes double
+   quotes; the password is a string literal, so it takes single quotes. Write the statement
+   to a file so the shell doesn't mangle either:
+
+   ```shell
+   cat > /tmp/pw.sql <<'EOF'
+   ALTER USER "<service-account-email>" WITH PASSWORD '<password>';
+   EOF
+   python scripts/run_sql.py /tmp/pw.sql && rm /tmp/pw.sql
+   ```
+
+   In `RP_SQL_DSN`, URL-encode the email (`@` becomes `%40`), along with any
+   `@ : / ? #` in the password:
+   `postgres://<sa-id>%40iam.serviceaccount.redpanda.com:<password>@<sql-host>:5432/oxla?sslmode=require`
+
+If you also use this service account for
 `rpk cloud login --client-id … --client-secret …` (for `deploy_pipelines.py`), its role
 also needs permission to manage Redpanda Connect pipelines.
 
