@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, Arc, Chunk, HOUR, MIN, QueryInfo } from "./api";
+import { api, ArcView, Chunk, HOUR, MIN, QueryInfo } from "./api";
 
 const ZONE_WINDOW = 15 * MIN;   // map colors = pickups in the last 15 history-minutes
 
@@ -79,21 +79,27 @@ export function usePlayback(opts: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minute, version, current, chunkMs]);
 
-  // Arcs stay on screen ~1.2 s of real time
-  const arcWindow = Math.min(30 * MIN, Math.max(2 * MIN, speed * 1200));
+  // Each arc grows from pickup to dropoff over the trip's own duration, then fades out over
+  // ~1.2 s of real time
+  const fadeWindow = Math.min(30 * MIN, Math.max(2 * MIN, speed * 1200));
   const arcs = useMemo(() => {
-    const out: { arc: Arc; age: number }[] = [];
-    const lo = playhead - arcWindow;
+    const out: ArcView[] = [];
     for (const key of [current - chunkMs, current]) {
       const c = chunks.current.get(key);
       if (typeof c !== "object") continue;
       for (const a of c.arcs) {
-        if (a[0] > lo && a[0] <= playhead) out.push({ arc: a, age: (playhead - a[0]) / arcWindow });
+        const [pickup, dropoff] = a;
+        if (pickup > playhead || playhead >= dropoff + fadeWindow) continue;
+        out.push({
+          arc: a,
+          progress: dropoff > pickup ? Math.min(1, (playhead - pickup) / (dropoff - pickup)) : 1,
+          age: Math.max(0, (playhead - dropoff) / fadeWindow),
+        });
       }
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playhead, version, current, chunkMs, arcWindow]);
+  }, [playhead, version, current, chunkMs, fadeWindow]);
 
   const seek = useCallback((t: number) => setPlayhead(Math.min(to, Math.max(from, t))), [from, to]);
 

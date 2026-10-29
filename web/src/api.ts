@@ -9,6 +9,8 @@ export type Zones = Record<string, Zone>;
 export type Origin = "history" | "replay" | "surge";
 /** [pickup_ms, dropoff_ms, pickup_zone, dropoff_zone, total_amount, origin] */
 export type Arc = [number, number, number, number, number, Origin];
+/** An arc on screen: progress 0..1 from pickup to dropoff, then age 0..1 while it fades out */
+export type ArcView = { arc: Arc; progress: number; age: number };
 /** [bucket_ms, zone, trips, avg_total] */
 export type Frame = [number, number, number, number];
 export type Chunk = { frames: Frame[]; arcs: Arc[]; queries: QueryInfo[] };

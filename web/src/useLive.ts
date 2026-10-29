@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Arc, LiveEvent, QueryInfo } from "./api";
+import { Arc, ArcView, LiveEvent, QueryInfo } from "./api";
 
-const ARC_TTL = 45_000; // live arcs fade over 45 s of real time
+// Live arcs grow from pickup to dropoff over GROW_MS (trips take minutes in real time, too
+// slow to watch), then fade out over the rest of ARC_TTL
+const ARC_TTL = 45_000;
+const GROW_MS = 3_000;
 
 /** Live mode: subscribes to the backend's shared SQL poller over SSE. */
 export function useLive(enabled: boolean, onQueries: (q: QueryInfo[]) => void) {
@@ -38,9 +41,13 @@ export function useLive(enabled: boolean, onQueries: (q: QueryInfo[]) => void) {
 
   const now = performance.now();
   const clock = last ? last.now + (now - lastAt.current) : null;
-  const visible = arcs.current
+  const visible: ArcView[] = arcs.current
     .filter((a) => now - a.at < ARC_TTL)
-    .map((a) => ({ arc: a.arc, age: (now - a.at) / ARC_TTL }));
+    .map((a) => ({
+      arc: a.arc,
+      progress: Math.min(1, (now - a.at) / GROW_MS),
+      age: Math.max(0, (now - a.at - GROW_MS) / (ARC_TTL - GROW_MS)),
+    }));
   const zoneCounts = new Map<number, number>(last?.zones ?? []);
   return { last, clock, arcs: visible, zoneCounts, error, tick };
 }

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import DeckGL from "@deck.gl/react";
-import { ArcLayer, GeoJsonLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import { Map } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Arc, ORIGIN_COLORS, Zones } from "../api";
+import { ArcView, ORIGIN_COLORS, Zones } from "../api";
 
 const BASEMAP = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 const VIEW = { longitude: -73.94, latitude: 40.72, zoom: 10.4, pitch: 40, bearing: -15 };
@@ -19,10 +19,25 @@ function colorFor(n: number, max: number): [number, number, number, number] {
   return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, 150];
 }
 
+// An arc is a parabola above the straight line between the zone centroids, peaking at a
+// fifth of the distance. Only the first `progress` of it is returned, so it grows over time.
+const SEGMENTS = 24;
+function arcPath(src: [number, number], dst: [number, number], progress: number): [number, number, number][] {
+  const mPerLon = 111_320 * Math.cos((src[1] * Math.PI) / 180);
+  const dist = Math.hypot((dst[0] - src[0]) * mPerLon, (dst[1] - src[1]) * 110_540);
+  const at = (t: number): [number, number, number] =>
+    [src[0] + (dst[0] - src[0]) * t, src[1] + (dst[1] - src[1]) * t, 0.8 * dist * t * (1 - t)];
+  const out = [];
+  const n = Math.ceil(progress * SEGMENTS);
+  for (let k = 0; k < n; k++) out.push(at(k / SEGMENTS));
+  out.push(at(progress));
+  return out;
+}
+
 type Props = {
   zones: Zones;
   zoneCounts: Map<number, number>;
-  arcs: { arc: Arc; age: number }[];
+  arcs: ArcView[];
   selectedZone: number | null;
   onZoneClick: (id: number) => void;
 };
@@ -33,10 +48,11 @@ export default function MapView({ zones, zoneCounts, arcs, selectedZone, onZoneC
 
   const max = useMemo(() => Math.max(1, ...zoneCounts.values()), [zoneCounts]);
 
-  const arcData = useMemo(() => arcs.flatMap(({ arc, age }) => {
+  const arcData = useMemo(() => arcs.flatMap(({ arc, progress, age }) => {
     const s = zones[arc[2]], d = zones[arc[3]];
     if (s?.lon == null || d?.lon == null || arc[2] === arc[3]) return [];
-    return [{ src: [s.lon, s.lat!] as [number, number], dst: [d.lon, d.lat!] as [number, number], age, origin: arc[5] }];
+    const path = arcPath([s.lon, s.lat!], [d.lon, d.lat!], progress);
+    return [{ path, head: path[path.length - 1], progress, age, origin: arc[5] }];
   }), [arcs, zones]);
 
   const layers = [
@@ -54,16 +70,24 @@ export default function MapView({ zones, zoneCounts, arcs, selectedZone, onZoneC
       updateTriggers: { getFillColor: [zoneCounts, max], getLineColor: selectedZone, getLineWidth: selectedZone },
       transitions: { getFillColor: 300 },
     }),
-    new ArcLayer({
+    new PathLayer({
       id: "arcs",
       data: arcData,
-      getSourcePosition: (d: any) => d.src,
-      getTargetPosition: (d: any) => d.dst,
-      getSourceColor: (d: any) => [...ORIGIN_COLORS[d.origin as keyof typeof ORIGIN_COLORS], 200 * (1 - d.age)],
-      getTargetColor: (d: any) => [...ORIGIN_COLORS[d.origin as keyof typeof ORIGIN_COLORS], 60 * (1 - d.age)],
+      getPath: (d: any) => d.path,
+      getColor: (d: any) => [...ORIGIN_COLORS[d.origin as keyof typeof ORIGIN_COLORS], 160 * (1 - d.age)],
       getWidth: (d: any) => (d.origin === "history" ? 1 : 2),
-      getHeight: 0.35,
-      greatCircle: false,
+      widthUnits: "pixels",
+      capRounded: true,
+      jointRounded: true,
+    }),
+    // The leading point of each arc that is still travelling
+    new ScatterplotLayer({
+      id: "arc-heads",
+      data: arcData.filter((d) => d.progress < 1),
+      getPosition: (d: any) => d.head,
+      getFillColor: (d: any) => [...ORIGIN_COLORS[d.origin as keyof typeof ORIGIN_COLORS], 230],
+      getRadius: 2.5,
+      radiusUnits: "pixels",
     }),
   ];
 
