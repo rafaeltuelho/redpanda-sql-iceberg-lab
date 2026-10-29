@@ -146,6 +146,7 @@ host with `rpk connect`. They read their credentials differently:
 |---|---|---|
 | Kafka SASL user | `${secrets.RP_USER}` | `RP_USER` in `.env` |
 | Kafka SASL password | `${secrets.RP_PASS}` | `RP_PASS` in `.env` |
+| SASL mechanism (default `SCRAM-SHA-256`) | `RP_SASL_MECHANISM` from `.env`, written into the YAML by `render.py` | `RP_SASL_MECHANISM` in `.env` |
 | SQL DSN (`replay-shift` only) | `${secrets.RP_SQL_DSN}` | `RP_SQL_DSN` in `.env` |
 | Brokers, Schema Registry | provided by Cloud (`${REDPANDA_BROKERS}`, `${REDPANDA_SCHEMA_REGISTRY_URL}`) | `REDPANDA_BROKERS`, `REDPANDA_SCHEMA_REGISTRY_URL` in `.env` |
 

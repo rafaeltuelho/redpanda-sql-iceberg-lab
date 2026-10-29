@@ -6,7 +6,7 @@ input:
     tls:
       enabled: true
     sasl:
-      - mechanism: SCRAM-SHA-256
+      - mechanism: ${RP_SASL_MECHANISM:SCRAM-SHA-256}
         username: "${secrets.RP_USER}"
         password: "${secrets.RP_PASS}"
     topics: [ trips_raw ]
@@ -83,7 +83,7 @@ output:
     tls:
       enabled: true
     sasl:
-      - mechanism: SCRAM-SHA-256
+      - mechanism: ${RP_SASL_MECHANISM:SCRAM-SHA-256}
         username: "${secrets.RP_USER}"
         password: "${secrets.RP_PASS}"
     topic: "${! @route }"
