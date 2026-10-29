@@ -39,6 +39,29 @@ rpk cluster config set \
 
 ## 2. Local environment
 
+The scripts and the app talk to the cluster's private endpoints, so this usually runs on an
+EC2 host in the VPC peered with the cluster. A t3.medium (2 vCPU, 4 GiB, `unlimited`
+credits, 20 GB gp3) is enough to build and run everything. Its security group needs egress to
+the cluster on 5432 (SQL), 9092 (Kafka) and 30081 (Schema Registry), and ingress on 8080
+from your IP only.
+
+On Ubuntu, install git, Node 22 (for the frontend) and rpk (used by `setup_cluster.sh`
+and `deploy_pipelines.py`):
+
+```shell
+sudo apt-get update && sudo apt-get install -y git curl unzip
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
+curl -LO https://github.com/redpanda-data/redpanda/releases/latest/download/rpk-linux-amd64.zip
+mkdir -p ~/.local/bin && unzip -o rpk-linux-amd64.zip -d ~/.local/bin/
+```
+
+The host has no browser, so log rpk in with a service account
+(`rpk cloud login --client-id … --client-secret …`) or set `DATAPLANE_TOKEN` for
+`deploy_pipelines.py`.
+
+uv installs Python 3.13 itself. All Python dependencies come as prebuilt x86_64 wheels, so
+no compiler or `libpq-dev` is needed:
+
 ```shell
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv venv --python 3.13 .venv
@@ -55,9 +78,6 @@ Credentials you need:
   `ALTER USER "sa@example.com" WITH PASSWORD '...'`. A SQL: Manage user also has to
   `GRANT SELECT` on the three tables to it. As an alternative, set `RP_SQL_AUTH=client_secret`
   and use the service account's client ID and secret.
-
-The scripts and the app talk to the cluster's private endpoints, so run them from inside
-the VPC peered with the cluster (for example on the EC2 host from step 6).
 
 ## 3. Topics, schemas and SQL tables
 
@@ -101,11 +121,43 @@ the backfill.
 | Where | How |
 |---|---|
 | Laptop / VPC host (dev) | `.venv/bin/uvicorn app.backend.main:app --port 8080`, and `cd web && npm install && npm run dev` |
-| EC2 + Compose | `docker compose -f deploy/compose/docker-compose.yml --env-file .env up -d --build` → `:8080` |
+| EC2 + Compose | `docker compose -f deploy/compose/docker-compose.yml --env-file .env up -d --build` → `:8080` (`podman compose` takes the same arguments) |
 | ECS Fargate | Store the `.env` keys as a JSON secret named `taxi-time-machine` in Secrets Manager, then `cd deploy/cdk && pip install -r requirements.txt && cdk deploy -c vpc_id=vpc-…` (add `-c public=true` for an internet-facing ALB) |
 
 The Fargate tasks run in private subnets with egress, so they need a NAT gateway or VPC
-endpoints to pull the image from ECR.
+endpoints to pull the image from ECR. `cdk deploy` builds the image (linux/amd64) and pushes
+it to the CDK bootstrap ECR repository, so you don't need a registry of your own.
+
+**Dev mode on a remote host.** The Vite dev server only listens on `localhost:5173`. Tunnel
+both ports from your laptop and open http://localhost:5173:
+
+```shell
+ssh -L 5173:localhost:5173 -L 8080:localhost:8080 ubuntu@<ec2-host>
+```
+
+Or skip Vite: run `cd web && npm ci && npm run build`, and uvicorn serves the UI and the
+API on `:8080`.
+
+**Podman.** The Compose file works with `podman compose` (`sudo apt-get install -y podman
+podman-compose`). Rootless Podman doesn't apply `restart: unless-stopped` after a reboot
+unless you enable it once:
+
+```shell
+loginctl enable-linger $USER && systemctl --user enable --now podman-restart.service
+```
+
+If the container can't reach the cluster, check that it resolves the private hostnames:
+`podman exec -it <app-container> getent hosts <sql-host>`.
+
+**First-run checks**, in this order. Each one exercises a part that has only been tested
+against a local Redpanda ([DESIGN.md §13](DESIGN.md#13-risks-and-open-questions)):
+
+1. `curl localhost:8080/api/health`: the SQL pool and auth.
+2. `curl "localhost:8080/api/volume?from=1669852800000&to=1669939200000"` (Dec 1, 2022): bound parameters and the `catalog=>table` mapping.
+3. **Live** mode in the UI: `(redpanda).partition/offset` access (there's a fallback query if
+   it fails).
+4. `replay-shift` (start it last): `sql_raw` against Redpanda SQL. Check its logs in the
+   Connect pipeline view.
 
 ## 7. Demo
 

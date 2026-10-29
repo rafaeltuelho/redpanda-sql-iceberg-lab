@@ -1,6 +1,7 @@
 # Run on an EC2 instance in the VPC peered with the Redpanda BYOC cluster:
 #   cp .env.example .env   # at the repo root, then fill it in
 #   docker compose -f deploy/compose/docker-compose.yml --env-file .env up -d --build
+#   (or with Podman: podman compose ... — same arguments)
 # Optional: run the Connect pipelines here instead of as managed Cloud pipelines:
 #   python connect/render.py --local
 #   docker compose -f deploy/compose/docker-compose.yml --env-file .env --profile connect up -d
