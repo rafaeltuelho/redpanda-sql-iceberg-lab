@@ -1,0 +1,75 @@
+# ① replay-shift: every 5 s, read the trips that happened at the same weekday and
+# time of day in the 2022-23 history, restamp them to "now" and produce them to
+# trips_raw (origin=replay). See DESIGN.md §7.
+input:
+  generate:
+    interval: 5s
+    mapping: |
+      let step = 5000000                      # 5 s, in micros
+      let week = 604800000000                 # 7 days
+      let cycle = 7257600000000               # 84 days = 12 weeks of history
+      let anchor = 1670198400000000           # Monday 2022-12-05T00:00:00 (NYC wall clock as UTC)
+      # NYC wall clock labelled as UTC (DESIGN.md §5), floored to the 5 s step
+      let now_wall = now().ts_tz("America/New_York").ts_format("2006-01-02T15:04:05").ts_parse("2006-01-02T15:04:05").ts_unix_micro()
+      let end = $now_wall - ($now_wall % $step)
+      # Same time of day in REPLAY_WEEKS different weeks gives a busier, still realistic stream
+      root = range(0, "${REPLAY_WEEKS:4}".number()).map_each(k -> {
+        "h": $anchor + (($end - $anchor + k * $week) % $cycle)
+      }).map_each(w -> {
+        "from": ((w.h - $step) / 1000000).ts_format("2006-01-02T15:04:05Z07:00", "UTC"),
+        "to": (w.h / 1000000).ts_format("2006-01-02T15:04:05Z07:00", "UTC"),
+        "shift": $end - w.h
+      })
+
+pipeline:
+  processors:
+    - unarchive:
+        format: json_array
+    - mapping: |
+        meta shift = this.shift
+        root = this
+    - sql_raw:
+        driver: postgres
+        dsn: "${secrets.RP_SQL_DSN}"
+        query: |
+          SELECT unix_micros(pickup_datetime) AS pickup_us,
+                 unix_micros(dropoff_datetime) AS dropoff_us,
+                 passenger_count, trip_distance, pickup_location_id, dropoff_location_id,
+                 payment_type, fare_amount, tip_amount, total_amount
+          FROM default_redpanda_catalog=>trips_enriched
+          WHERE origin = 'history'
+            AND pickup_datetime >= $1::timestamptz
+            AND pickup_datetime <  $2::timestamptz
+        args_mapping: root = [ this.from, this.to ]
+    - unarchive:
+        format: json_array
+    - mapping: |
+        root = this.without("pickup_us", "dropoff_us")
+        root.pickup_datetime = this.pickup_us + @shift
+        root.dropoff_datetime = this.dropoff_us + @shift
+        root.origin = "replay"
+    - schema_registry_encode:
+        url: "${REDPANDA_SCHEMA_REGISTRY_URL}"
+        subject: trips_raw-value
+        avro:
+          raw_json: true
+        basic_auth:
+          enabled: true
+          username: "${secrets.RP_USER}"
+          password: "${secrets.RP_PASS}"
+    - catch:
+        - log:
+            level: WARN
+            message: "replay-shift dropped a record: ${! error() }"
+        - mapping: root = deleted()
+
+output:
+  redpanda:
+    seed_brokers: [ "${REDPANDA_BROKERS}" ]
+    tls:
+      enabled: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: "${secrets.RP_USER}"
+        password: "${secrets.RP_PASS}"
+    topic: trips_raw

@@ -197,7 +197,7 @@ Surge and replay trips go through the same path as history.
 ### Deployment of pipelines
 
 First runs go through the Cloud UI (Connect → Create pipeline, paste the rendered YAML,
-attach secrets). `scripts/deploy_pipelines.sh` does the same through the Data Plane API
+attach secrets). `scripts/deploy_pipelines.py` does the same through the Data Plane API
 (`/v1/redpanda-connect/pipelines`) for repeat deploys. Terraform `redpanda_pipeline` is an
 alternative if the cluster is already managed with Terraform.
 
@@ -293,7 +293,7 @@ schemas/                    # Avro schemas
 scripts/setup_cluster.sh    # topics, schema registration, SQL tables
 scripts/sql/create_tables.sql
 scripts/prep_zones.py       # TLC zones → web/public/taxi_zones.geojson + app/zones.json
-scripts/deploy_pipelines.sh
+scripts/deploy_pipelines.py
 connect/                    # pipeline templates + render.py
 app/                        # FastAPI backend
 web/                        # Vite + React + deck.gl

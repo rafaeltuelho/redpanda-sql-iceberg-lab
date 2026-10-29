@@ -1,0 +1,10 @@
+.git
+.venv
+.env
+raw/
+*.parquet
+web/node_modules
+web/dist
+connect/dist
+deploy/
+**/__pycache__

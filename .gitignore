@@ -2,3 +2,11 @@
 .venv/
 raw/
 *.parquet
+connect/dist/
+web/node_modules/
+web/dist/
+deploy/cdk/cdk.out/
+__pycache__/
+deploy/cdk/cdk.context.json
+deploy/cdk/.venv/
+*.tsbuildinfo

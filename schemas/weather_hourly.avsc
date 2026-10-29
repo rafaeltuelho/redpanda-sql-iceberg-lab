@@ -1,0 +1,14 @@
+{
+  "type": "record", "name": "WeatherHourly", "namespace": "nyc.weather",
+  "doc": "Open-Meteo hourly weather for NYC. obs_hour is NYC wall clock stored as UTC.",
+  "fields": [
+    {"name": "obs_hour",     "type": {"type": "long", "logicalType": "timestamp-micros"}},
+    {"name": "temp_c",       "type": ["null", "double"], "default": null},
+    {"name": "precip_mm",    "type": ["null", "double"], "default": null},
+    {"name": "rain_mm",      "type": ["null", "double"], "default": null},
+    {"name": "snow_cm",      "type": ["null", "double"], "default": null},
+    {"name": "wind_kmh",     "type": ["null", "double"], "default": null},
+    {"name": "weather_code", "type": ["null", "int"],    "default": null},
+    {"name": "kind",         "type": "string", "doc": "archive | live"}
+  ]
+}

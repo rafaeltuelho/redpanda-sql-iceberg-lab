@@ -1,0 +1,89 @@
+# ② trips-enrich: decode trips_raw, add zone names and derived fields, and route
+# rows that fail a data-quality rule to trips_quarantine. See DESIGN.md §6-7.
+input:
+  redpanda:
+    seed_brokers: [ "${REDPANDA_BROKERS}" ]
+    tls:
+      enabled: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: "${secrets.RP_USER}"
+        password: "${secrets.RP_PASS}"
+    topics: [ trips_raw ]
+    consumer_group: trips-enrich
+
+pipeline:
+  processors:
+    - schema_registry_decode:
+        url: "${REDPANDA_SCHEMA_REGISTRY_URL}"
+        avro:
+          raw_unions: true
+        basic_auth:
+          enabled: true
+          username: "${secrets.RP_USER}"
+          password: "${secrets.RP_PASS}"
+    - mapping: |
+        # TLC taxi zones, inlined by connect/render.py from app/backend/zones.json
+        let zones = __ZONES__
+        let unknown = {"zone": "Unknown", "borough": "Unknown"}
+        let pu = $zones.get(this.pickup_location_id.string()).or($unknown)
+        let dz = $zones.get(this.dropoff_location_id.string()).or($unknown)
+        let duration = (this.dropoff_datetime - this.pickup_datetime) / 60000000
+        let speed = if $duration > 0 { this.trip_distance / ($duration / 60) } else { null }
+
+        root = this
+        root.pickup_zone = $pu.zone
+        root.pickup_borough = $pu.borough
+        root.dropoff_zone = $dz.zone
+        root.dropoff_borough = $dz.borough
+        root.duration_min = $duration
+        root.speed_mph = $speed
+        root.tip_pct = if this.fare_amount > 0 { this.tip_amount / this.fare_amount } else { null }
+        root.is_airport = [1, 132, 138].contains(this.pickup_location_id) || [1, 132, 138].contains(this.dropoff_location_id)
+        root.payment_label = match this.payment_type {
+          1 => "credit card"
+          2 => "cash"
+          3 => "no charge"
+          4 => "dispute"
+          5 => "unknown"
+          6 => "voided"
+          _ => "other"
+        }
+
+        # Data-quality rules, first failure wins
+        let reason = match {
+          $duration <= 0 => "duration<=0"
+          $duration > 360 => "duration>6h"
+          $speed.or(0) > 100 => "speed>100mph"
+          this.trip_distance > 200 => "distance>200mi"
+          this.fare_amount < 0 => "fare<0"
+          this.total_amount > 1000 => "total>1000"
+          _ => null
+        }
+        root.reason = if $reason == null { deleted() } else { $reason }
+        meta route = if $reason == null { "trips_enriched" } else { "trips_quarantine" }
+    - schema_registry_encode:
+        url: "${REDPANDA_SCHEMA_REGISTRY_URL}"
+        subject: "${! @route }-value"
+        avro:
+          raw_json: true
+        basic_auth:
+          enabled: true
+          username: "${secrets.RP_USER}"
+          password: "${secrets.RP_PASS}"
+    - catch:
+        - log:
+            level: WARN
+            message: "trips-enrich dropped a record: ${! error() }"
+        - mapping: root = deleted()
+
+output:
+  redpanda:
+    seed_brokers: [ "${REDPANDA_BROKERS}" ]
+    tls:
+      enabled: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: "${secrets.RP_USER}"
+        password: "${secrets.RP_PASS}"
+    topic: "${! @route }"

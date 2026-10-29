@@ -1,0 +1,29 @@
+# Run on an EC2 instance in the VPC peered with the Redpanda BYOC cluster:
+#   cp .env.example .env   # at the repo root, then fill it in
+#   docker compose -f deploy/compose/docker-compose.yml --env-file .env up -d --build
+# Optional: run the Connect pipelines here instead of as managed Cloud pipelines:
+#   python connect/render.py --local
+#   docker compose -f deploy/compose/docker-compose.yml --env-file .env --profile connect up -d
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: taxi-time-machine:latest
+    env_file: ../../.env
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 5s
+
+  connect:
+    profiles: [connect]
+    image: docker.redpanda.com/redpandadata/connect:latest
+    env_file: ../../.env
+    command: ["streams", "/pipelines/trips-enrich.yaml", "/pipelines/weather-loader.yaml", "/pipelines/replay-shift.yaml"]
+    volumes:
+      - ../../connect/dist/local:/pipelines:ro
+    restart: unless-stopped

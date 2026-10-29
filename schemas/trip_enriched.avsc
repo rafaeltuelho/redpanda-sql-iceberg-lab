@@ -1,0 +1,108 @@
+{
+  "type": "record",
+  "name": "TripEnriched",
+  "namespace": "nyc.taxi",
+  "doc": "Trip enriched by the trips-enrich Connect pipeline.",
+  "fields": [
+    {
+      "name": "pickup_datetime",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-micros"
+      }
+    },
+    {
+      "name": "dropoff_datetime",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-micros"
+      }
+    },
+    {
+      "name": "passenger_count",
+      "type": [
+        "null",
+        "int"
+      ],
+      "default": null
+    },
+    {
+      "name": "trip_distance",
+      "type": "double"
+    },
+    {
+      "name": "pickup_location_id",
+      "type": "int"
+    },
+    {
+      "name": "dropoff_location_id",
+      "type": "int"
+    },
+    {
+      "name": "payment_type",
+      "type": "int"
+    },
+    {
+      "name": "fare_amount",
+      "type": "double"
+    },
+    {
+      "name": "tip_amount",
+      "type": "double"
+    },
+    {
+      "name": "total_amount",
+      "type": "double"
+    },
+    {
+      "name": "origin",
+      "type": "string",
+      "default": "history",
+      "doc": "history | replay | surge"
+    },
+    {
+      "name": "pickup_zone",
+      "type": "string"
+    },
+    {
+      "name": "pickup_borough",
+      "type": "string"
+    },
+    {
+      "name": "dropoff_zone",
+      "type": "string"
+    },
+    {
+      "name": "dropoff_borough",
+      "type": "string"
+    },
+    {
+      "name": "duration_min",
+      "type": "double"
+    },
+    {
+      "name": "speed_mph",
+      "type": [
+        "null",
+        "double"
+      ],
+      "default": null
+    },
+    {
+      "name": "tip_pct",
+      "type": [
+        "null",
+        "double"
+      ],
+      "default": null
+    },
+    {
+      "name": "is_airport",
+      "type": "boolean"
+    },
+    {
+      "name": "payment_label",
+      "type": "string"
+    }
+  ]
+}

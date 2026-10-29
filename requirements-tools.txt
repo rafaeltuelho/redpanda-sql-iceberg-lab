@@ -1,0 +1,6 @@
+# Scripts: prep.py, produce.py, scripts/prep_zones.py, scripts/run_sql.py
+-r app/requirements.txt
+duckdb
+pyarrow
+pyshp
+pyproj

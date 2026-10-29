@@ -1,0 +1,74 @@
+# ③ weather-loader: Open-Meteo hourly weather for NYC into weather_hourly.
+# One archive pull for the history window, then the last full hour every hour.
+# Times use timezone=America/New_York and are stored as UTC (DESIGN.md §5).
+input:
+  broker:
+    inputs:
+      - generate:
+          count: 1
+          interval: ""
+          mapping: |
+            meta kind = "archive"
+            meta url = "https://archive-api.open-meteo.com/v1/archive?latitude=40.7128&longitude=-74.0060&start_date=2022-12-01&end_date=2023-02-28&hourly=temperature_2m,precipitation,rain,snowfall,wind_speed_10m,weather_code&timezone=America%2FNew_York"
+            root = {}
+      - generate:
+          interval: "0 5 * * * *"
+          mapping: |
+            meta kind = "live"
+            meta url = "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.0060&past_days=1&forecast_days=1&hourly=temperature_2m,precipitation,rain,snowfall,wind_speed_10m,weather_code&timezone=America%2FNew_York"
+            root = {}
+
+pipeline:
+  processors:
+    - http:
+        url: "${! @url }"
+        verb: GET
+    - mapping: |
+        let kind = @kind
+        let h = this.hourly
+        let rows = $h.time.enumerated().map_each(e -> {
+          "obs_hour": e.value.ts_parse("2006-01-02T15:04").ts_unix_micro(),
+          "temp_c": $h.temperature_2m.index(e.index),
+          "precip_mm": $h.precipitation.index(e.index),
+          "rain_mm": $h.rain.index(e.index),
+          "snow_cm": $h.snowfall.index(e.index),
+          "wind_kmh": $h.wind_speed_10m.index(e.index),
+          "weather_code": $h.weather_code.index(e.index),
+          "kind": $kind
+        })
+        # Live: keep only the hour that just ended, so the table holds one row per hour
+        let hour = 3600000000
+        let now_wall = now().ts_tz("America/New_York").ts_format("2006-01-02T15:04:05").ts_parse("2006-01-02T15:04:05").ts_unix_micro()
+        let last_hour = $now_wall - ($now_wall % $hour) - $hour
+        root = if $kind == "live" { $rows.filter(r -> r.obs_hour == $last_hour) } else { $rows }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        meta key = this.obs_hour.string()
+        root = this
+    - schema_registry_encode:
+        url: "${REDPANDA_SCHEMA_REGISTRY_URL}"
+        subject: weather_hourly-value
+        avro:
+          raw_json: true
+        basic_auth:
+          enabled: true
+          username: "${secrets.RP_USER}"
+          password: "${secrets.RP_PASS}"
+    - catch:
+        - log:
+            level: WARN
+            message: "weather-loader dropped a record: ${! error() }"
+        - mapping: root = deleted()
+
+output:
+  redpanda:
+    seed_brokers: [ "${REDPANDA_BROKERS}" ]
+    tls:
+      enabled: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: "${secrets.RP_USER}"
+        password: "${secrets.RP_PASS}"
+    topic: weather_hourly
+    key: "${! @key }"

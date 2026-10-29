@@ -1,0 +1,84 @@
+import { useEffect, useMemo, useState } from "react";
+import DeckGL from "@deck.gl/react";
+import { ArcLayer, GeoJsonLayer } from "@deck.gl/layers";
+import { Map } from "react-map-gl/maplibre";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { Arc, ORIGIN_COLORS, Zones } from "../api";
+
+const BASEMAP = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+const VIEW = { longitude: -73.94, latitude: 40.72, zoom: 10.4, pitch: 40, bearing: -15 };
+
+// Sequential scale: deep blue -> teal -> amber -> red, on a log scale of pickups
+const STOPS: [number, number, number][] = [[20, 32, 64], [32, 120, 140], [64, 196, 190], [255, 176, 59], [255, 72, 72]];
+function colorFor(n: number, max: number): [number, number, number, number] {
+  if (!n) return [0, 0, 0, 0];
+  const x = Math.min(1, Math.log1p(n) / Math.log1p(Math.max(max, 1))) * (STOPS.length - 1);
+  const i = Math.min(STOPS.length - 2, Math.floor(x));
+  const f = x - i;
+  const [a, b] = [STOPS[i], STOPS[i + 1]];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, 150];
+}
+
+type Props = {
+  zones: Zones;
+  zoneCounts: Map<number, number>;
+  arcs: { arc: Arc; age: number }[];
+  selectedZone: number | null;
+  onZoneClick: (id: number) => void;
+};
+
+export default function MapView({ zones, zoneCounts, arcs, selectedZone, onZoneClick }: Props) {
+  const [geo, setGeo] = useState<GeoJSON.FeatureCollection | null>(null);
+  useEffect(() => { fetch("/taxi_zones.geojson").then((r) => r.json()).then(setGeo); }, []);
+
+  const max = useMemo(() => Math.max(1, ...zoneCounts.values()), [zoneCounts]);
+
+  const arcData = useMemo(() => arcs.flatMap(({ arc, age }) => {
+    const s = zones[arc[2]], d = zones[arc[3]];
+    if (s?.lon == null || d?.lon == null || arc[2] === arc[3]) return [];
+    return [{ src: [s.lon, s.lat!] as [number, number], dst: [d.lon, d.lat!] as [number, number], age, origin: arc[5] }];
+  }), [arcs, zones]);
+
+  const layers = [
+    new GeoJsonLayer({
+      id: "zones",
+      data: geo ?? { type: "FeatureCollection", features: [] },
+      pickable: true,
+      stroked: true,
+      filled: true,
+      getFillColor: (f: any) => colorFor(zoneCounts.get(f.properties.id) ?? 0, max),
+      getLineColor: (f: any) => (f.properties.id === selectedZone ? [255, 72, 72, 255] : [120, 140, 170, 60]),
+      getLineWidth: (f: any) => (f.properties.id === selectedZone ? 60 : 12),
+      lineWidthMinPixels: 0.5,
+      onClick: (info: any) => info.object && onZoneClick(info.object.properties.id),
+      updateTriggers: { getFillColor: [zoneCounts, max], getLineColor: selectedZone, getLineWidth: selectedZone },
+      transitions: { getFillColor: 300 },
+    }),
+    new ArcLayer({
+      id: "arcs",
+      data: arcData,
+      getSourcePosition: (d: any) => d.src,
+      getTargetPosition: (d: any) => d.dst,
+      getSourceColor: (d: any) => [...ORIGIN_COLORS[d.origin as keyof typeof ORIGIN_COLORS], 200 * (1 - d.age)],
+      getTargetColor: (d: any) => [...ORIGIN_COLORS[d.origin as keyof typeof ORIGIN_COLORS], 60 * (1 - d.age)],
+      getWidth: (d: any) => (d.origin === "history" ? 1 : 2),
+      getHeight: 0.35,
+      greatCircle: false,
+    }),
+  ];
+
+  return (
+    <DeckGL
+      initialViewState={VIEW}
+      controller
+      layers={layers}
+      getTooltip={({ object }: any) => {
+        if (!object?.properties) return null;
+        const p = object.properties;
+        return `${p.zone} · ${p.borough}\n${zoneCounts.get(p.id) ?? 0} pickups (15 min) · #${p.id}`;
+      }}
+    >
+      <Map mapStyle={BASEMAP} />
+    </DeckGL>
+  );
+}

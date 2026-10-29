@@ -1,0 +1,8 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "vpc_id": "",
+    "public": false,
+    "secret_name": "taxi-time-machine"
+  }
+}
