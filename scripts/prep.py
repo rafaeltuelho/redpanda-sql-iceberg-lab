@@ -7,7 +7,7 @@ a narrow time range = the min/max stats can prune files at query time.
 
 Usage:
     pip install duckdb pyarrow
-    python prep.py
+    python scripts/prep.py
 """
 import os
 import urllib.request

@@ -1,4 +1,4 @@
-# Scripts: prep.py, produce.py, scripts/prep_zones.py, scripts/run_sql.py
+# Scripts: scripts/prep.py, scripts/produce.py, scripts/prep_zones.py, scripts/run_sql.py
 -r app/requirements.txt
 duckdb
 pyarrow

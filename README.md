@@ -87,8 +87,8 @@ and `rpk connect run connect/dist/local/<name>.yaml` (or the Compose `connect` p
 ## 5. Backfill history, then start live replay
 
 ```shell
-python prep.py                                  # downloads and sorts Dec 2022 - Feb 2023 (~9M rows)
-python produce.py trips_sorted.parquet trips_raw
+python scripts/prep.py                                  # downloads and sorts Dec 2022 - Feb 2023 (~9M rows)
+python scripts/produce.py trips_sorted.parquet trips_raw
 python scripts/run_sql.py -c "SELECT count(*) FROM default_redpanda_catalog=>trips_enriched"
 python scripts/deploy_pipelines.py replay-shift # once the backfill is enriched
 ```
@@ -123,9 +123,9 @@ Every view has its SQL in the **SQL log** panel.
 
 | Path | What |
 |---|---|
-| `prep.py`, `produce.py` | Download and sort the TLC data, backfill into `trips_raw` |
+| `scripts/prep.py`, `scripts/produce.py` | Download and sort the TLC data, backfill into `trips_raw` |
 | `schemas/` | Avro schemas for the four topics |
-| `scripts/` | Cluster setup, SQL runner, zone asset prep, pipeline deploy |
+| `scripts/` | Data prep and backfill, cluster setup, SQL runner, zone asset prep, pipeline deploy |
 | `connect/` | Pipeline templates and `render.py` |
 | `app/backend/` | FastAPI API (`/api/*`) and shared live poller |
 | `web/` | React + deck.gl + MapLibre frontend |

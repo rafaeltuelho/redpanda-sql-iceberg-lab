@@ -287,8 +287,8 @@ Config comes from environment variables (`.env.example`).
 
 ```
 DESIGN.md  README.md  Dockerfile  .env.example
-prep.py                     # existing: download + sort TLC parquet
-produce.py                  # updated: → trips_raw, origin=history, schema from schemas/
+scripts/prep.py             # existing: download + sort TLC parquet
+scripts/produce.py          # updated: → trips_raw, origin=history, schema from schemas/
 schemas/                    # Avro schemas
 scripts/setup_cluster.sh    # topics, schema registration, SQL tables
 scripts/sql/create_tables.sql

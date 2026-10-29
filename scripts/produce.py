@@ -8,7 +8,7 @@ Usage:
     export RP_BOOTSTRAP="<bootstrap-url>:9092"
     export RP_SR_URL="https://<schema-registry-url>"
     export RP_USER="taxi-lab" RP_PASS="<password>"
-    python produce.py trips_sorted.parquet trips_raw
+    python scripts/produce.py trips_sorted.parquet trips_raw
 """
 import os
 import sys
@@ -22,7 +22,7 @@ from confluent_kafka.serialization import SerializationContext, MessageField
 PARQUET_FILE = sys.argv[1] if len(sys.argv) > 1 else "trips_sorted.parquet"
 TOPIC = sys.argv[2] if len(sys.argv) > 2 else "trips_raw"
 
-SCHEMA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schemas", "trip_raw.avsc")
+SCHEMA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schemas", "trip_raw.avsc")
 SCHEMA = open(SCHEMA_FILE).read()
 
 user, pwd = os.environ["RP_USER"], os.environ["RP_PASS"]
