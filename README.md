@@ -149,21 +149,25 @@ host with `rpk connect`. They read their credentials differently:
 | SQL DSN (`replay-shift` only) | `${secrets.RP_SQL_DSN}` | `RP_SQL_DSN` in `.env` |
 | Brokers, Schema Registry | provided by Cloud (`${REDPANDA_BROKERS}`, `${REDPANDA_SCHEMA_REGISTRY_URL}`) | `REDPANDA_BROKERS`, `REDPANDA_SCHEMA_REGISTRY_URL` in `.env` |
 
-**Managed in Cloud:** before you create the pipelines, create the three secrets in the
-cluster's **Secrets Store** (**Create Secret**, scope **Redpanda Connect**). Their IDs must
-match exactly: `RP_USER`, `RP_PASS`, `RP_SQL_DSN`. Secret values are stored as they are and
-can't reference other secrets, so `RP_SQL_DSN` holds the complete URL:
+**Managed in Cloud:** the pipelines need three secrets in the cluster's **Secrets Store**
+(scope **Redpanda Connect**), with these exact IDs: `RP_USER`, `RP_PASS`, `RP_SQL_DSN`.
+`deploy_pipelines.py` creates or updates them for you from the same variables in `.env`,
+for the pipelines you deploy, before it deploys them. Pass `--no-secrets` if you'd rather
+create them yourself in the Console (**Create Secret**).
+
+Secret values are stored as they are and can't reference other secrets, so `RP_SQL_DSN`
+holds the complete URL:
 `postgres://<sa-id>%40iam.serviceaccount.redpanda.com:<password>@<sql-host>:5432/oxla?sslmode=require`
-(see step 5 under "Create the SQL service account"). A pipeline only reads a secret's value
-when it starts, so restart the pipeline after you change one.
+(see step 5 under "Create the SQL service account"). In `.env`, quote any value that
+contains spaces or `#`. A pipeline only reads a secret's value when it starts, so restart
+the pipeline after you change one.
 
 **Local:** `render.py --local` rewrites every `${secrets.X}` to `${X}`, so the same values
 come from your environment instead and the Secrets Store isn't used.
 
 ```shell
 python connect/render.py                       # -> connect/dist/*.yaml (zone map inlined)
-export DATAPLANE_URL=https://api-....byoc.prd.cloud.redpanda.com
-python scripts/deploy_pipelines.py trips-enrich weather-loader
+python scripts/deploy_pipelines.py trips-enrich weather-loader   # DATAPLANE_URL from .env
 ```
 
 You can also paste `connect/dist/<name>.yaml` into **Connect → Create pipeline** in the
