@@ -57,15 +57,15 @@ FROM (
 """
 
 THEN_VS_NOW = f"""
-SELECT period, origin, count(*) AS trips, avg(total_amount) AS avg_total, avg(tip_pct) AS avg_tip_pct,
+SELECT era, origin, count(*) AS trips, avg(total_amount) AS avg_total, avg(tip_pct) AS avg_tip_pct,
        sum(CASE WHEN is_airport THEN 1 ELSE 0 END) AS airport_trips
 FROM (
-  SELECT CASE WHEN pickup_datetime >= %(now_from)s THEN 'now' ELSE 'then' END AS period,
+  SELECT CASE WHEN pickup_datetime >= %(now_from)s THEN 'now' ELSE 'then' END AS era,
          origin, total_amount, tip_pct, is_airport
   FROM {T}
   WHERE (pickup_datetime >= %(now_from)s AND pickup_datetime < %(now_to)s)
      OR (pickup_datetime >= %(then_from)s AND pickup_datetime < %(then_to)s)
-) s GROUP BY period, origin
+) s GROUP BY era, origin
 """
 
 QUALITY = f"""

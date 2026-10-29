@@ -114,7 +114,15 @@ button.danger { background: var(--surge); border-color: var(--surge); color: #ff
 .buffering { font-size: 12px; color: var(--iceberg); }
 .presets { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
 .presets button { font-size: 12px; padding: 4px 8px; }
-.track { width: 100%; height: 60px; margin-top: 8px; cursor: pointer; touch-action: none; display: block; }
+.presets button.on { border-color: var(--accent); color: var(--accent); background: rgba(255, 90, 54, 0.12); }
+.track-wrap { position: relative; margin-top: 8px; }
+.track { width: 100%; height: 60px; cursor: pointer; touch-action: none; display: block; }
+.track .hoverline { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.track-tip {
+  position: absolute; bottom: calc(100% + 4px); pointer-events: none; white-space: nowrap;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px 8px; font-size: 12px; font-variant-numeric: tabular-nums;
+}
 .track .volume { fill: rgba(64, 196, 190, 0.35); stroke: var(--history); stroke-width: 0.6; vector-effect: non-scaling-stroke; }
 .track .rain { fill: rgba(124, 196, 255, 0.8); }
 .track .snow { fill: #ffffff; }

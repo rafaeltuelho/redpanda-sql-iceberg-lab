@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, Meta, ORIGIN_COLORS, QueryInfo, Zones } from "./api";
+import { api, fmtDate, fmtTime, Meta, ORIGIN_COLORS, QueryInfo, Zones } from "./api";
 import MapView from "./components/MapView";
 import Timeline from "./components/Timeline";
 import { QualityCard, RainCard, SourceCard, SqlLog, SurgeCard, ThenVsNowCard } from "./components/Panel";
@@ -73,7 +73,8 @@ export default function App() {
           {error && <div className="toast">{error}</div>}
           {mode === "live" && (
             <div className="live-clock">
-              <span className="dot" /> {live.clock ? new Date(live.clock).toISOString().slice(11, 19) : "connecting…"} NYC
+              <small>{live.clock ? `Now · ${fmtDate(live.clock)}` : ""}</small>
+              <span className="dot" /> {live.clock ? fmtTime(live.clock) : "connecting…"} NYC
               <small>{live.last ? `${live.arcs.length} trips in the last 45 s` : ""}</small>
             </div>
           )}

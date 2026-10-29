@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { fmtDate, fmtTime, utc } from "../api";
 import { PRESETS } from "../usePlayback";
 
@@ -15,6 +15,8 @@ const W = 1000;
 
 export default function Timeline(p: Props) {
   const svg = useRef<SVGSVGElement>(null);
+  const [preset, setPreset] = useState<string | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
   const span = p.to - p.from;
   const x = (t: number) => ((t - p.from) / span) * W;
 
@@ -26,10 +28,11 @@ export default function Timeline(p: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.volume, p.from, p.to]);
 
-  const seekFrom = (e: React.PointerEvent) => {
+  const timeAt = (e: React.PointerEvent) => {
     const r = svg.current!.getBoundingClientRect();
-    p.onSeek(p.from + ((e.clientX - r.left) / r.width) * span);
+    return p.from + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * span;
   };
+  const hoverPct = hover == null ? 0 : ((hover - p.from) / span) * 100;
 
   return (
     <div className="timeline">
@@ -48,20 +51,41 @@ export default function Timeline(p: Props) {
         </div>
         <div className="presets">
           {PRESETS.map((pr) => (
-            <button key={pr.label} onClick={() => p.onSeek(utc(pr.at))}>{pr.label}</button>
+            <button key={pr.label} className={pr.label === preset ? "on" : ""}
+              onClick={() => { setPreset(pr.label); p.onSeek(utc(pr.at)); }}>{pr.label}</button>
           ))}
         </div>
       </div>
+      <div className="track-wrap">
       <svg ref={svg} className="track" viewBox={`0 0 ${W} 60`} preserveAspectRatio="none"
-        onPointerDown={(e) => { (e.target as Element).setPointerCapture(e.pointerId); seekFrom(e); }}
-        onPointerMove={(e) => e.buttons === 1 && seekFrom(e)}>
+        onPointerDown={(e) => {
+          (e.target as Element).setPointerCapture(e.pointerId);
+          setPreset(null);
+          p.onSeek(timeAt(e));
+        }}
+        onPointerMove={(e) => {
+          const t = timeAt(e);
+          setHover(t);
+          if (e.buttons === 1) p.onSeek(t);
+        }}
+        onPointerLeave={() => setHover(null)}>
         <path d={area} className="volume" />
         {p.weather.map(([t, , precip, snow]) => (
           <rect key={t} x={x(t)} width={W / (span / 3_600_000)} y={44}
             height={Math.min(16, (precip ?? 0) * 4)} className={snow ? "snow" : "rain"} />
         ))}
+        {hover != null && <line x1={x(hover)} x2={x(hover)} y1={0} y2={60} className="hoverline" />}
         <line x1={x(p.playhead)} x2={x(p.playhead)} y1={0} y2={60} className="playhead" />
       </svg>
+      {hover != null && (
+        <div className="track-tip" style={{
+          left: `${hoverPct}%`,
+          transform: `translateX(${hoverPct < 8 ? "0" : hoverPct > 92 ? "-100%" : "-50%"})`,
+        }}>
+          {fmtDate(hover)} · {fmtTime(hover).slice(0, 5)}
+        </div>
+      )}
+      </div>
       <div className="track-legend">
         <span>{fmtDate(p.from)}</span>
         <span><i className="sw vol" /> trips per hour <i className="sw rain" /> rain <i className="sw snow" /> snow</span>
