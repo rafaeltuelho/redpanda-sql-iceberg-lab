@@ -3,17 +3,17 @@ Step 4 — Produce the sorted trips into `trips_raw` as Avro (Schema Registry wi
 format), tagged origin=history. The trips-enrich Connect pipeline enriches them into
 the Iceberg-enabled `trips_enriched` topic.
 
+Reads RP_BOOTSTRAP, RP_SR_URL, RP_USER, RP_PASS and RP_SASL_MECHANISM from the repo's .env
+(exported environment variables take precedence).
+
 Usage:
-    pip install "confluent-kafka[avro]" pyarrow
-    export RP_BOOTSTRAP="<bootstrap-url>:9092"
-    export RP_SR_URL="https://<schema-registry-url>"
-    export RP_USER="taxi-lab" RP_PASS="<password>"
     python scripts/produce.py trips_sorted.parquet trips_raw
 """
 import os
 import sys
 import time
 import pyarrow.parquet as pq
+from dotenv import load_dotenv
 from confluent_kafka import Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroSerializer
@@ -21,6 +21,8 @@ from confluent_kafka.serialization import SerializationContext, MessageField
 
 PARQUET_FILE = sys.argv[1] if len(sys.argv) > 1 else "trips_sorted.parquet"
 TOPIC = sys.argv[2] if len(sys.argv) > 2 else "trips_raw"
+
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
 
 SCHEMA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schemas", "trip_raw.avsc")
 SCHEMA = open(SCHEMA_FILE).read()
