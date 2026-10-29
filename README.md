@@ -139,8 +139,26 @@ in `schemas/` and maps the SQL tables (`scripts/sql/create_tables.sql`).
 
 ## 4. Connect pipelines
 
-Create these secrets in the Cloud Console (**Secrets Store**, scope Redpanda Connect):
-`RP_USER`, `RP_PASS` and `RP_SQL_DSN` (`postgres://<user>:<password>@<sql-host>:5432/oxla?sslmode=require`).
+The pipelines can run as managed pipelines in Redpanda Cloud (recommended), or on your own
+host with `rpk connect`. They read their credentials differently:
+
+| Value | Managed in Cloud | Local `rpk connect` / Compose |
+|---|---|---|
+| Kafka SASL user | `${secrets.RP_USER}` | `RP_USER` in `.env` |
+| Kafka SASL password | `${secrets.RP_PASS}` | `RP_PASS` in `.env` |
+| SQL DSN (`replay-shift` only) | `${secrets.RP_SQL_DSN}` | `RP_SQL_DSN` in `.env` |
+| Brokers, Schema Registry | provided by Cloud (`${REDPANDA_BROKERS}`, `${REDPANDA_SCHEMA_REGISTRY_URL}`) | `REDPANDA_BROKERS`, `REDPANDA_SCHEMA_REGISTRY_URL` in `.env` |
+
+**Managed in Cloud:** before you create the pipelines, create the three secrets in the
+cluster's **Secrets Store** (**Create Secret**, scope **Redpanda Connect**). Their IDs must
+match exactly: `RP_USER`, `RP_PASS`, `RP_SQL_DSN`. Secret values are stored as they are and
+can't reference other secrets, so `RP_SQL_DSN` holds the complete URL:
+`postgres://<sa-id>%40iam.serviceaccount.redpanda.com:<password>@<sql-host>:5432/oxla?sslmode=require`
+(see step 5 under "Create the SQL service account"). A pipeline only reads a secret's value
+when it starts, so restart the pipeline after you change one.
+
+**Local:** `render.py --local` rewrites every `${secrets.X}` to `${X}`, so the same values
+come from your environment instead and the Secrets Store isn't used.
 
 ```shell
 python connect/render.py                       # -> connect/dist/*.yaml (zone map inlined)
