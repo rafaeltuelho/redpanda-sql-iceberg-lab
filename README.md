@@ -73,11 +73,34 @@ Credentials you need:
 
 * **Kafka user** (`RP_USER` / `RP_PASS`, SASL/SCRAM) with produce and consume on the four
   topics, and with Schema Registry access.
-* **Redpanda SQL service account** with the **SQL: Access** role. For SCRAM, a
-  **SQL: Manage** user sets its password:
-  `ALTER USER "sa@example.com" WITH PASSWORD '...'`. A SQL: Manage user also has to
-  `GRANT SELECT` on the three tables to it. As an alternative, set `RP_SQL_AUTH=client_secret`
-  and use the service account's client ID and secret.
+* **Redpanda SQL service account.** Kafka SASL users can't sign in to Redpanda SQL. SQL
+  users are Redpanda Cloud identities (org users or service accounts) that hold a data-plane
+  role with a SQL permission. See the steps below.
+
+**Create the SQL service account:**
+
+1. In the Cloud Console, go to **Organization IAM → Service accounts → Create service
+   account**, and give it a name (for example `nyc-taxi-lab-user`).
+2. Under **Role binding**, choose scope **Cluster**, your cluster as the resource, and a role
+   with a SQL permission. Roles are defined under **Organization IAM → Roles → Data Plane**.
+   * **SQL: Manage** is the simplest choice for a demo. It can read every topic, create
+     the tables in `scripts/sql/create_tables.sql` and set passwords, so no grants are
+     needed.
+   * **SQL: Access** is least privilege. It can only read what it's granted, so a
+     SQL: Manage user has to run `GRANT SELECT` on the three tables after step 3 below.
+3. Copy the client ID and secret. Assigning the role creates the matching user in the SQL
+   engine; you don't need `CREATE USER`.
+4. Choose how the app signs in (`.env`):
+   * `RP_SQL_AUTH=client_secret`, with `RP_SQL_USER` set to the client ID and
+     `RP_SQL_PASSWORD` set to the client secret. No password setup is needed.
+   * `RP_SQL_AUTH=scram`, with `RP_SQL_USER` set to the service account's email. A
+     SQL: Manage user first sets the password:
+     `ALTER USER "<service-account-email>" WITH PASSWORD '...'`.
+
+The `RP_SQL_DSN` secret for the `replay-shift` pipeline is a plain Postgres URL, so it uses
+the SCRAM password from step 4. If you also use this service account for
+`rpk cloud login --client-id … --client-secret …` (for `deploy_pipelines.py`), its role
+also needs permission to manage Redpanda Connect pipelines.
 
 ## 3. Topics, schemas and SQL tables
 
