@@ -53,7 +53,15 @@ aside {
   gap: 12px;
 }
 
-.card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.card { position: relative; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+/* How the card gets its data: fades in on hover, then out again after a few seconds */
+.card .via {
+  position: absolute; top: -11px; right: 10px; max-width: calc(100% - 20px); z-index: 1;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px 8px; font-size: 11px; color: var(--iceberg); pointer-events: none; opacity: 0;
+}
+.card:hover .via { animation: via-fade 3.5s ease forwards; }
+@keyframes via-fade { 0% { opacity: 0; } 8%, 75% { opacity: 1; } 100% { opacity: 0; } }
 .card h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .card .note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
 .card code { font-size: 11px; color: var(--text); background: #0d1320; padding: 1px 4px; border-radius: 4px; }

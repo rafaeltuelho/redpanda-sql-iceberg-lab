@@ -3,9 +3,13 @@ import { api, fmtDate, fmtNum, fmtTime, Meta, QueryInfo, Zones } from "../api";
 
 type Mode = "history" | "live";
 
-function Card({ title, children, note }: { title: string; children: React.ReactNode; note?: React.ReactNode }) {
+/** `via` says how the card gets its data; it shows briefly when the card is hovered. */
+function Card({ title, children, note, via }: {
+  title: string; children: React.ReactNode; note?: React.ReactNode; via?: string;
+}) {
   return (
     <section className="card">
+      {via && <span className="via">{via}</span>}
       <h3>{title}</h3>
       {children}
       {note && <p className="note">{note}</p>}
@@ -33,7 +37,7 @@ export function SourceCard({ mode, meta, freshness }: { mode: Mode; meta: Meta |
   const lag = meta?.iceberg_lag_ms ?? 60_000;
   if (mode === "history") {
     return (
-      <Card title="Where these rows come from" note={<>Topic retention is 1 h, so 2022-23 rows can only be served from <b>Iceberg</b>. The same table also returns live rows.</>}>
+      <Card title="Where these rows come from" via="On demand · /api/chunk as the playhead moves, one chunk ahead (cached 30 min)" note={<>Topic retention is 1 h, so 2022-23 rows can only be served from <b>Iceberg</b>. The same table also returns live rows.</>}>
         <div className="big iceberg">Iceberg</div>
         <code className="table">{meta?.tables.trips}</code>
       </Card>
@@ -41,7 +45,7 @@ export function SourceCard({ mode, meta, freshness }: { mode: Mode; meta: Meta |
   }
   const inTopic = freshness != null && freshness < lag;
   return (
-    <Card title="Freshness" note={<>Iceberg commits every ~{lag / 1000}s. Rows newer than that can only be coming from the <b>topic</b>, and the same SQL table returns them with the Iceberg history.</>}>
+    <Card title="Freshness" via="SSE · /api/live pushes every ~2 s from one shared SQL poller" note={<>Iceberg commits every ~{lag / 1000}s. Rows newer than that can only be coming from the <b>topic</b>, and the same SQL table returns them with the Iceberg history.</>}>
       <div className={`big ${inTopic ? "topic" : ""}`}>{freshness == null ? "–" : `${(freshness / 1000).toFixed(1)} s`}</div>
       <div className="sub">{freshness == null ? "waiting for live rows…" : inTopic ? "newest row: still in the topic, not in Iceberg yet" : "newest row may already be in Iceberg"}</div>
     </Card>
@@ -59,7 +63,7 @@ export function ThenVsNowCard({ onQueries, weeks }: { onQueries: (q: QueryInfo[]
   };
   const now = sum("now"), then = sum("then");
   return (
-    <Card title="Then vs now: one query" note={<>Last hour (topic + Iceberg) vs the same weekday and hour in the history (Iceberg). “Now” replays {weeks} historical weeks, so expect about {weeks}× the volume.</>}>
+    <Card title="Then vs now: one query" via="Polling · every 15 s (server cache 10 s)" note={<>Last hour (topic + Iceberg) vs the same weekday and hour in the history (Iceberg). “Now” replays {weeks} historical weeks, so expect about {weeks}× the volume.</>}>
       {error ? <p className="error">{error}</p> : (
         <table className="kv">
           <thead><tr><th /><th>then {data && <small>{fmtDate(data.then[0])}</small>}</th><th>now {data && <small>last hour from {fmtTime(data.now[0]).slice(0, 5)}</small>}</th></tr></thead>
@@ -81,7 +85,7 @@ export function RainCard({ onQueries }: { onQueries: (q: QueryInfo[]) => void })
   const order = ["dry", "rain", "snow"];
   const rows = [...(data?.data ?? [])].sort((a, b) => order.indexOf(a.sky) - order.indexOf(b.sky));
   return (
-    <Card title="Weather vs demand" note={<><code>trips_enriched ⋈ weather_hourly</code> on the pickup hour, both Iceberg-backed topics.</>}>
+    <Card title="Weather vs demand" via="Polling · every 10 min (server cache 10 min)" note={<><code>trips_enriched ⋈ weather_hourly</code> on the pickup hour, both Iceberg-backed topics.</>}>
       {error ? <p className="error">{error}</p> : !data ? <p className="sub">running join…</p> : (
         <table className="kv">
           <thead><tr><th /><th>trips/h</th><th>tip</th><th>ride</th></tr></thead>
@@ -108,7 +112,7 @@ export function QualityCard({ onQueries }: { onQueries: (q: QueryInfo[]) => void
   for (const r of data?.data ?? []) byReason.set(r.reason, (byReason.get(r.reason) ?? 0) + r.trips);
   const total = [...byReason.values()].reduce((a, b) => a + b, 0);
   return (
-    <Card title="Quarantined by Connect" note={<>The <code>trips-enrich</code> pipeline routes rows that fail a quality rule to <code>trips_quarantine</code>.</>}>
+    <Card title="Quarantined by Connect" via="Polling · every 30 s (server cache 30 s)" note={<>The <code>trips-enrich</code> pipeline routes rows that fail a quality rule to <code>trips_quarantine</code>.</>}>
       {error ? <p className="error">{error}</p> : (
         <>
           <div className="big">{fmtNum(total)}</div>
@@ -144,7 +148,7 @@ export function SurgeCard({ zones, zone, setZone, onSent }: {
   };
   const options = Array.from(new Set([zone, ...SURGE_ZONES]));
   return (
-    <Card title="Surge" note="Produces trips into trips_raw; Connect enriches them and SQL picks them up within seconds. Tip: click a zone on the map.">
+    <Card title="Surge" via="On click · POST /api/surge produces to trips_raw" note="Produces trips into trips_raw; Connect enriches them and SQL picks them up within seconds. Tip: click a zone on the map.">
       <div className="row">
         <select value={zone} onChange={(e) => setZone(Number(e.target.value))}>
           {options.map((z) => <option key={z} value={z}>{zones[z]?.zone ?? z}</option>)}
@@ -159,7 +163,7 @@ export function SurgeCard({ zones, zone, setZone, onSent }: {
 
 export function SqlLog({ log }: { log: QueryInfo[] }) {
   return (
-    <Card title="SQL log">
+    <Card title="SQL log" via="Collected from every response above">
       <ol className="sqllog">
         {log.map((q, i) => (
           <li key={`${q.at}-${i}`}>
