@@ -35,11 +35,15 @@ export function usePlayback(opts: {
   }, [chunkMs, from, to, sample, onQueries]);
 
   const current = keyOf(playhead);
+  // Debounced so dragging across the timeline only loads the chunks where it stops
   useEffect(() => {
     if (!enabled) return;
-    ensure(current - chunkMs);   // rolling windows reach into the previous chunk
-    ensure(current);
-    ensure(current + chunkMs);
+    const id = setTimeout(() => {
+      ensure(current - chunkMs);   // rolling windows reach into the previous chunk
+      ensure(current);
+      ensure(current + chunkMs);
+    }, 150);
+    return () => clearTimeout(id);
   }, [enabled, current, chunkMs, ensure, version]);
 
   const ready = typeof chunks.current.get(current) === "object";

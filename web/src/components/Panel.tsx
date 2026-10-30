@@ -164,7 +164,7 @@ export function SqlLog({ log }: { log: QueryInfo[] }) {
         {log.map((q, i) => (
           <li key={`${q.at}-${i}`}>
             <details>
-              <summary><span className="qname">{q.name}</span><span className="qms">{fmtNum(q.ms)} ms · {fmtNum(q.rows)} rows</span></summary>
+              <summary><span className="qname">{q.name}</span><span className="qms">{q.cached ? "cached" : `${fmtNum(q.ms)} ms`} · {fmtNum(q.rows)} rows</span></summary>
               <pre>{q.sql}</pre>
             </details>
           </li>

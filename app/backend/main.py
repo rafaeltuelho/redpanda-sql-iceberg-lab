@@ -5,10 +5,11 @@ import json
 import logging
 import os
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -36,16 +37,27 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="NYC Taxi Time Machine", lifespan=lifespan)
 
-# Small TTL cache for expensive aggregate endpoints
-_cache: dict[tuple, tuple[float, dict]] = {}
+# TTL + LRU cache for query endpoints. Concurrent misses for the same key share one fetch,
+# and a hit marks its queries as cached so the SQL log doesn't report the old latency as new.
+CACHE_MAX = 256
+_cache: OrderedDict[tuple, tuple[float, dict]] = OrderedDict()
+_inflight: dict[tuple, asyncio.Task] = {}
 
 
 async def cached(key: tuple, ttl_s: float, fn):
     hit = _cache.get(key)
     if hit and time.monotonic() - hit[0] < ttl_s:
-        return hit[1]
-    value = await fn()
+        _cache.move_to_end(key)
+        return {**hit[1], "queries": [{**q, "cached": True} for q in hit[1].get("queries", [])]}
+    task = _inflight.get(key)
+    if task is None:
+        task = _inflight[key] = asyncio.create_task(fn())
+        task.add_done_callback(lambda _: _inflight.pop(key, None))
+    value = await asyncio.shield(task)
     _cache[key] = (time.monotonic(), value)
+    _cache.move_to_end(key)
+    while len(_cache) > CACHE_MAX:
+        _cache.popitem(last=False)
     return value
 
 
@@ -97,17 +109,24 @@ async def volume(from_: int = Query(alias="from"), to: int = Query(), bucket_s: 
 
 
 @app.get("/api/chunk")
-async def chunk(from_: int = Query(alias="from"), to: int = Query(), bucket_s: int = Query(60, ge=10),
-                limit: int = Query(6000, le=20000), sample: int = Query(1, ge=1, le=60)):
-    """Map frames (counts per bucket and zone) plus trips to animate, for one playback chunk."""
+async def chunk(response: Response, from_: int = Query(alias="from"), to: int = Query(),
+                bucket_s: int = Query(60, ge=10), limit: int = Query(6000, le=20000),
+                sample: int = Query(1, ge=1, le=60)):
+    """Map frames (counts per bucket and zone) plus trips to animate, for one playback chunk.
+    History doesn't change once the backfill is done, so chunks are cached for 30 min on the
+    server and 10 min in the browser (short enough that a backfill still in progress shows up)."""
     start, end = time_range(from_, to)
     p = {"from": start, "to": end}
-    (frames, f_info), (arcs, a_info) = await asyncio.gather(
-        run("map frames", queries.FRAMES, {**p, "bucket_us": bucket_s * 1_000_000}),
-        run("trip arcs", queries.ARCS, {**p, "limit": limit, "sample": sample}),
-    )
-    return {"frames": [[t, z, n, round(a or 0, 2)] for t, z, n, a in frames],
-            "arcs": [list(r) for r in arcs], "queries": [f_info, a_info]}
+
+    async def fetch():
+        (frames, f_info), (arcs, a_info) = await asyncio.gather(
+            run("map frames", queries.FRAMES, {**p, "bucket_us": bucket_s * 1_000_000}),
+            run("trip arcs", queries.ARCS, {**p, "limit": limit, "sample": sample}),
+        )
+        return {"frames": [[t, z, n, round(a or 0, 2)] for t, z, n, a in frames],
+                "arcs": [list(r) for r in arcs], "queries": [f_info, a_info]}
+    response.headers["Cache-Control"] = "public, max-age=600"
+    return await cached(("chunk", from_, to, bucket_s, limit, sample), 1800, fetch)
 
 
 @app.get("/api/weather")
@@ -132,15 +151,17 @@ async def rain():
 
 @app.get("/api/insights/then-vs-now")
 async def then_vs_now():
-    now = ny_now()
-    then = to_history(now)
-    hour = timedelta(hours=1)
-    rows, info = await run("then vs now", queries.THEN_VS_NOW, {
-        "now_from": now - hour, "now_to": now, "then_from": then - hour, "then_to": then})
-    cols = ["period", "origin", "trips", "avg_total", "avg_tip_pct", "airport_trips"]
-    return {"data": [dict(zip(cols, r)) for r in rows],
-            "now": [ms(now - hour), ms(now)], "then": [ms(then - hour), ms(then)],
-            "queries": [info]}
+    async def fetch():
+        now = ny_now()
+        then = to_history(now)
+        hour = timedelta(hours=1)
+        rows, info = await run("then vs now", queries.THEN_VS_NOW, {
+            "now_from": now - hour, "now_to": now, "then_from": then - hour, "then_to": then})
+        cols = ["period", "origin", "trips", "avg_total", "avg_tip_pct", "airport_trips"]
+        return {"data": [dict(zip(cols, r)) for r in rows],
+                "now": [ms(now - hour), ms(now)], "then": [ms(then - hour), ms(then)],
+                "queries": [info]}
+    return await cached(("then-vs-now",), 10, fetch)
 
 
 @app.get("/api/insights/quality")

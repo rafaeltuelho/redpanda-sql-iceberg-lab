@@ -1,5 +1,5 @@
 // Times are epoch ms of NYC wall clock stored as UTC (DESIGN.md §5): always format in UTC.
-export type QueryInfo = { name: string; sql: string; ms: number; rows: number; at?: number };
+export type QueryInfo = { name: string; sql: string; ms: number; rows: number; at?: number; cached?: boolean };
 export type Meta = {
   history_from: number; history_to: number; ny_now: number;
   iceberg_lag_ms: number; replay_weeks: number; tables: Record<string, string>;
