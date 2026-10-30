@@ -242,6 +242,39 @@ The demo script is in [DESIGN.md §11](DESIGN.md#11-demo-script-about-8-min):
 
 Every view has its SQL in the **SQL log** panel.
 
+## 8. What it costs to run
+
+The demo runs on a BYOC cluster, so there are two bills: **Redpanda** (cluster, SQL engine
+and Connect pipelines, priced on your organization's rate card) and **AWS** (the
+infrastructure in your account). Redpanda doesn't publish its per-hour prices: the
+**Estimated costs** panel in the cluster create flow shows the Redpanda compute and SQL
+engine estimate for your rate card, or ask your Redpanda account team. The AWS lines below
+use public us-east-1 on-demand prices at about 730 hours a month; check
+[AWS pricing](https://aws.amazon.com/pricing/) for your region.
+
+| Line | Size in this demo | Billed by | Approx. per month |
+|---|---|---|---|
+| BYOC cluster, Tier 1 (20 MBps in, 60 MBps out) | the demo uses a tiny fraction of it | Redpanda (RPU-hours) | from your rate card |
+| Broker nodes and supporting infrastructure (EKS control plane, utility nodes, NAT, load balancers) | created by Redpanda for Tier 1 | AWS | see Cost Explorer; the EKS control plane alone is about $73 |
+| Redpanda SQL engine | 1 compute node = 4 RPUs, billed while enabled, **even when idle** | Redpanda (RPU-hours) | from your rate card |
+| SQL compute node hardware | 1 × `m6i.2xlarge` ($0.384/h) | AWS | about $280 |
+| Connect pipelines | 3 × 200m CPU, 256 MiB | Redpanda | from your rate card |
+| Iceberg data in S3 | under 1 GB of Parquet for 9.3M trips, plus a new file per partition each Iceberg commit (~60 s) | AWS | a few dollars (mostly PUT requests) |
+| AWS Glue catalog | 3 tables, one commit a minute each | AWS | under $1 |
+| App on EC2 | 1 × t3.medium ($0.0416/h) + 20 GB gp3 | AWS | about $32 |
+| *or* app on Fargate | 0.5 vCPU, 1 GB (about $0.025/h) + ALB ($0.0225/h + LCUs) | AWS | about $35, plus about $33 for a NAT gateway if the VPC doesn't have one |
+| Data transfer | VPC peering and cross-AZ traffic at demo volumes | AWS | a few dollars |
+
+The fixed costs dominate: the Tier 1 cluster, the SQL engine and its `m6i.2xlarge`
+node run the same whether the demo is busy or idle. The demo's own data and traffic are
+small. To cut costs between demos:
+
+* **Disable the SQL engine** when you're not using it. It's billed while enabled, even when
+  idle.
+* **Stop the Connect pipelines**, at least `replay-shift`, which otherwise keeps producing
+  and querying around the clock.
+* **Stop the EC2 instance**, or scale the Fargate service to 0.
+
 ## Repository
 
 | Path | What |
