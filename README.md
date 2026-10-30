@@ -193,11 +193,47 @@ the backfill.
 |---|---|
 | Laptop / VPC host (dev) | `.venv/bin/uvicorn app.backend.main:app --port 8080`, and `cd web && npm install && npm run dev` |
 | EC2 + Compose | `docker compose -f deploy/compose/docker-compose.yml --env-file .env up -d --build` → `:8080` (`podman compose` takes the same arguments) |
-| ECS Fargate | Store the `.env` keys as a JSON secret named `taxi-time-machine` in Secrets Manager, then `cd deploy/cdk && pip install -r requirements.txt && cdk deploy -c vpc_id=vpc-…` (add `-c public=true` for an internet-facing ALB) |
+| ECS Fargate | Create the `taxi-time-machine` secret (see below), then `cd deploy/cdk && pip install -r requirements.txt && cdk deploy -c vpc_id=vpc-…` (add `-c public=true` for an internet-facing ALB) |
 
 The Fargate tasks run in private subnets with egress, so they need a NAT gateway or VPC
 endpoints to pull the image from ECR. `cdk deploy` builds the image (linux/amd64) and pushes
 it to the CDK bootstrap ECR repository, so you don't need a registry of your own.
+
+**ECS Fargate configuration.** The image holds no settings; ECS injects them as env vars
+when each task starts, from two places in [deploy/cdk/app.py](deploy/cdk/app.py):
+
+- **Secrets Manager.** ECS reads the keys listed in `SECRET_KEYS` from a JSON secret, named
+  `taxi-time-machine` by default (`-c secret_name=…` to change it). Other keys in the
+  secret are ignored. Create it before the first deploy:
+
+  ```shell
+  aws secretsmanager create-secret --name taxi-time-machine --secret-string '{
+    "RP_BOOTSTRAP": "seed-xxxx.<cluster-id>.byoc.prd.cloud.redpanda.com:9092",
+    "RP_SR_URL": "https://schema-registry-xxxx.<cluster-id>.byoc.prd.cloud.redpanda.com:30081",
+    "RP_USER": "taxi-lab",
+    "RP_PASS": "<broker-password>",
+    "RP_SQL_HOST": "<sql-endpoint>",
+    "RP_SQL_AUTH": "client_secret",
+    "RP_SQL_USER": "<client-id>",
+    "RP_SQL_PASSWORD": "<client-secret>"
+  }'
+  ```
+
+- **Plain env vars.** Non-secret values live in the task definition's `environment` dict
+  (`RP_SQL_PORT=5432`, `RP_SQL_DB=oxla`).
+
+Tasks read the secret only at startup. After changing it, roll the service:
+
+```shell
+aws secretsmanager put-secret-value --secret-id taxi-time-machine --secret-string file://secret.json
+aws ecs update-service --cluster <cluster> --service <service> --force-new-deployment
+```
+
+Every other setting the app reads (`RP_SASL_MECHANISM`, `RP_SECURITY_PROTOCOL`,
+`RP_SQL_CATALOG`, `HISTORY_FROM`/`HISTORY_TO`, `REPLAY_WEEKS`, `LIVE_POLL_S`, table and topic
+names) uses its default on Fargate. To override one, add it to `environment` (or to
+`SECRET_KEYS` and the secret) and run `cdk deploy` again. For example, a cluster that uses
+`SCRAM-SHA-512` needs `"RP_SASL_MECHANISM": "SCRAM-SHA-512"` in `environment`.
 
 **Dev mode on a remote host.** The Vite dev server only listens on `localhost:5173`. Tunnel
 both ports from your laptop and open http://localhost:5173:
