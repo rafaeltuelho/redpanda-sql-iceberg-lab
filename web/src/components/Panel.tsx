@@ -161,18 +161,48 @@ export function SurgeCard({ zones, zone, setZone, onSent }: {
   );
 }
 
+/** Copies text, falling back to execCommand where the Clipboard API isn't available
+ *  (it needs a secure context, so plain http://<host>:8080 doesn't have it). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* fall back */ }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand("copy");
+  ta.remove();
+  return ok;
+}
+
 export function SqlLog({ log }: { log: QueryInfo[] }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = async (key: string, sql: string) => {
+    if (!(await copyText(sql))) return;
+    setCopied(key);
+    setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+  };
   return (
-    <Card title="SQL log" via="Collected from every response above">
+    <Card title="SQL log" via="Collected from every response above · click a row to copy its SQL">
       <ol className="sqllog">
-        {log.map((q, i) => (
-          <li key={`${q.at}-${i}`}>
-            <details>
-              <summary><span className="qname">{q.name}</span><span className="qms">{q.cached ? "cached" : `${fmtNum(q.ms)} ms`} · {fmtNum(q.rows)} rows</span></summary>
-              <pre>{q.sql}</pre>
-            </details>
-          </li>
-        ))}
+        {log.map((q, i) => {
+          const key = `${q.at}-${q.name}`;
+          return (
+            <li key={`${q.at}-${i}`}>
+              <details>
+                <summary title="Click to copy the SQL" onClick={() => copy(key, q.sql)}>
+                  <span className="qname">{q.name}</span>
+                  <span className="qms">{copied === key ? <span className="copied">copied</span>
+                    : <>{q.cached ? "cached" : `${fmtNum(q.ms)} ms`} · {fmtNum(q.rows)} rows</>}</span>
+                </summary>
+                <pre>{q.sql}</pre>
+              </details>
+            </li>
+          );
+        })}
       </ol>
     </Card>
   );

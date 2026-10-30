@@ -147,6 +147,7 @@ ol.sqllog li:first-child { border-top: 0; }
 ol.sqllog summary { display: flex; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; }
 .qname { color: var(--text); }
 .qms { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.qms .copied { color: var(--history); }
 ol.sqllog pre {
   white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; padding: 8px;
   background: #0d1320; border-radius: 6px; font-size: 11px; color: #b8c4dc;
